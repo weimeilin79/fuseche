@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="        http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd        http://camel.apache.org/schema/spring       http://camel.apache.org/schema/spring/camel-spring.xsd">
+    <bean class="org.mycompany.ProductProcessor" id="productProcessor"/>
+    <camelContext id="camel" xmlns="http://camel.apache.org/schema/spring">
+        <restConfiguration apiContextPath="api-docs" bindingMode="auto"
+            component="undertow" contextPath="/analytic"
+            enableCORS="true" port="8080">
+            <apiProperty key="cors" value="true"/>
+            <apiProperty key="api.title" value="fuse demo product"/>
+            <apiProperty key="api.version" value="1.0.0"/>
+        </restConfiguration>
+        <rest path="/status">
+            <post uri="add/{name}/{amount}">
+                <description>Add an product</description>
+                <to uri="direct:addproduct"/>
+            </post>
+            <get uri="productgroup">
+                <description>Product Group Booking status</description>
+                <to uri="direct:productsalesdatastatus"/>
+            </get>
+            <get uri="product">
+                <description>&gt;Product Booking status</description>
+                <to uri="direct:productstatus"/>
+            </get>
+            <get uri="all">
+                <description>&gt;Product Booking status</description>
+                <to uri="direct:allproducts"/>
+            </get>
+        </rest>
+        <route id="all-route">
+            <from id="_direct1" uri="direct:allproducts"/>
+            <to id="_to1" uri="sql:SELECT * from productsalesdata;?dataSource=dataSource"/>
+            <log id="route-log1" message=">>> ${body}"/>
+        </route>
+        <route id="class-route">
+            <from id="_direct1" uri="direct:productsalesdatastatus"/>
+            <to id="_to2" uri="sql:SELECT productgroup, SUM(amount) as cnt FROM productsalesdata GROUP BY productgroup;?dataSource=dataSource"/>
+            <log id="route-log2" message=">>> ${body}"/>
+        </route>
+        <route id="row-route">
+            <from id="_direct2" uri="direct:productstatus"/>
+            <to id="_to3" uri="sql:SELECT product, SUM(amount) as cnt FROM productsalesdata GROUP BY product;?dataSource=dataSource"/>
+            <log id="route-log4" message=">>> ${body}"/>
+        </route>
+        <route id="add-product-route">
+            <from id="_direct3" uri="direct:addproduct"/>
+            <log id="route-log5" message=">>>add-product ${headers.name} and ${headers.amount}"/>
+            <bean id="_bean1"
+                method="determineGroup(${headers.name},${headers.amount})" ref="productProcessor"/>
+            <log id="route-log6" message=">>> ${body} and ${headers.name} and ${headers.amount}"/>
+            <setHeader headerName="productType" id="_setHeader1">
+                <simple>${body.productType}</simple>
+            </setHeader>
+            <setHeader headerName="productName" id="_setHeader2">
+                <simple>${body.product}</simple>
+            </setHeader>
+            <to id="_to4" uri="sql:INSERT INTO productsalesdata (productgroup, product, amount) VALUES (:#productType,:#productName,:#amount);?dataSource=dataSource"/>
+        </route>
+    </camelContext>
+</beans>
